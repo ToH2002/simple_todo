@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/service_locator.dart';
+import '../../services/caldav_service.dart';
 import '../../data/data_manager.dart';
 import '../../data/todo_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,9 +11,10 @@ class TodoListPageManager extends ChangeNotifier {
   List<ToDoList> allLists = [];
   ToDoList? currentList;
   List<ToDoItem> allItems = [];
-  String currentFilter = 'all';
+  String currentFilter = 'current';
   String currentTagFilter = 'All'; // 'All' means no tag filter applied
-  bool showCompletedItems = true;
+  bool showCompletedItems = false;
+  bool isSyncing = false;
 
   TodoListPageManager() {
     loadLists();
@@ -65,6 +67,33 @@ class TodoListPageManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> syncCurrentList() async {
+    if (currentList == null ||
+        !currentList!.syncEnabled ||
+        currentList!.calDavUrl == null)
+      return;
+
+    isSyncing = true;
+    notifyListeners();
+
+    try {
+      final calDavService = getIt<CalDavService>();
+      final updatedList = await calDavService.syncList(currentList!);
+
+      // Save the merged data to storage
+      await _dataManager.saveList(updatedList);
+
+      // Reload the local UI state
+      currentList = updatedList;
+      allItems = List.from(currentList!.items);
+    } catch (e) {
+      print('Manual sync failed: $e');
+    } finally {
+      isSyncing = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> switchList(String listId) async {
     final list = await _dataManager.getList(listId);
     if (list != null) {
@@ -94,6 +123,7 @@ class TodoListPageManager extends ChangeNotifier {
 
     // Base filter
     var list = allItems
+        .where((item) => !item.isDeleted)
         .where((item) {
           if (currentFilter == 'current') {
             return item.startDateTime == null ||
@@ -126,7 +156,9 @@ class TodoListPageManager extends ChangeNotifier {
     // Sort primarily by priority (descending, high first)
     // Sort secondarily by due date (ascending, soonest first)
     list.sort((a, b) {
-      int priorityComparison = b.priority.index.compareTo(a.priority.index);
+      int weightA = a.priority == Priority.none ? -1 : a.priority.index;
+      int weightB = b.priority == Priority.none ? -1 : b.priority.index;
+      int priorityComparison = weightB.compareTo(weightA);
       if (priorityComparison != 0) {
         return priorityComparison;
       }
@@ -207,6 +239,7 @@ class TodoListPageManager extends ChangeNotifier {
     final index = currentList!.items.indexWhere((i) => i.id == item.id);
     if (index != -1) {
       currentList!.items[index].isDone = isDone ?? false;
+      currentList!.items[index].lastModified = DateTime.now();
 
       // Update local cache
       allItems = List.from(currentList!.items);
@@ -239,7 +272,18 @@ class TodoListPageManager extends ChangeNotifier {
 
   Future<void> deleteCompletedItems() async {
     if (currentList == null) return;
-    currentList!.items.removeWhere((item) => item.isDone);
+
+    if (currentList!.syncEnabled) {
+      for (var item in currentList!.items) {
+        if (item.isDone) {
+          item.isDeleted = true;
+          item.lastModified = DateTime.now();
+        }
+      }
+    } else {
+      currentList!.items.removeWhere((item) => item.isDone);
+    }
+
     allItems = List.from(currentList!.items);
     await _dataManager.saveList(currentList!);
     notifyListeners();
@@ -247,7 +291,17 @@ class TodoListPageManager extends ChangeNotifier {
 
   Future<void> deleteItem(ToDoItem item) async {
     if (currentList == null) return;
-    currentList!.items.removeWhere((i) => i.id == item.id);
+
+    if (currentList!.syncEnabled) {
+      final index = currentList!.items.indexWhere((i) => i.id == item.id);
+      if (index != -1) {
+        currentList!.items[index].isDeleted = true;
+        currentList!.items[index].lastModified = DateTime.now();
+      }
+    } else {
+      currentList!.items.removeWhere((i) => i.id == item.id);
+    }
+
     allItems = List.from(currentList!.items);
     await _dataManager.saveList(currentList!);
     notifyListeners();

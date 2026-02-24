@@ -84,7 +84,11 @@ class LocalDataManager implements DataManager {
   @override
   Future<List<ToDoList>> getLists() async {
     await init();
-    return _lists.values.toList();
+    final sortedLists = _lists.values.toList();
+    sortedLists.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    return sortedLists;
   }
 
   @override

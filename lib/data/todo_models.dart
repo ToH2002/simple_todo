@@ -11,6 +11,8 @@ class ToDoItem {
   final Priority priority;
   final List<String> tags;
   final DateTime createDateTime;
+  DateTime lastModified;
+  bool isDeleted; // Soft-delete flag for syncing
   final DateTime? startDateTime;
   final DateTime? dueDateTime;
   final String? recurringRule;
@@ -24,10 +26,12 @@ class ToDoItem {
     this.priority = Priority.none,
     this.tags = const [],
     required this.createDateTime,
+    DateTime? lastModified,
     this.startDateTime,
     this.dueDateTime,
     this.recurringRule,
-  });
+    this.isDeleted = false,
+  }) : lastModified = lastModified ?? createDateTime;
 
   Map<String, dynamic> toJson() {
     return {
@@ -39,9 +43,11 @@ class ToDoItem {
       'priority': priority.index,
       'tags': tags,
       'createDateTime': createDateTime.toIso8601String(),
+      'lastModified': lastModified.toIso8601String(),
       'startDateTime': startDateTime?.toIso8601String(),
       'dueDateTime': dueDateTime?.toIso8601String(),
       'recurringRule': recurringRule,
+      'isDeleted': isDeleted,
     };
   }
 
@@ -57,6 +63,9 @@ class ToDoItem {
       ),
       tags: List<String>.from(json['tags'] ?? []),
       createDateTime: DateTime.parse(json['createDateTime']),
+      lastModified: json['lastModified'] != null
+          ? DateTime.parse(json['lastModified'])
+          : DateTime.parse(json['createDateTime']),
       startDateTime: json['startDateTime'] != null
           ? DateTime.parse(json['startDateTime'])
           : null,
@@ -64,6 +73,7 @@ class ToDoItem {
           ? DateTime.parse(json['dueDateTime'])
           : null,
       recurringRule: json['recurringRule'],
+      isDeleted: json['isDeleted'] ?? false,
     );
   }
 }
@@ -76,12 +86,12 @@ class ToDoList {
   items; // Hold the items here for a self-contained file payload
   final List<String> tags; // Available tags for this list
 
-  // Phase 3: CalDAV Metadata
   bool syncEnabled;
   String? calDavUrl;
   String? calDavUsername;
   String? calDavPassword;
   String? calDavCalendarId;
+  DateTime? lastSync;
 
   ToDoList({
     required this.id,
@@ -94,6 +104,7 @@ class ToDoList {
     this.calDavUsername,
     this.calDavPassword,
     this.calDavCalendarId,
+    this.lastSync,
   }) : items = items ?? [],
        tags = tags ?? [];
 
@@ -109,6 +120,7 @@ class ToDoList {
       'calDavUsername': calDavUsername,
       'calDavPassword': calDavPassword,
       'calDavCalendarId': calDavCalendarId,
+      'lastSync': lastSync?.toIso8601String(),
     };
   }
 
@@ -126,6 +138,9 @@ class ToDoList {
       calDavUsername: json['calDavUsername'],
       calDavPassword: json['calDavPassword'],
       calDavCalendarId: json['calDavCalendarId'],
+      lastSync: json['lastSync'] != null
+          ? DateTime.parse(json['lastSync'])
+          : null,
     );
   }
 }

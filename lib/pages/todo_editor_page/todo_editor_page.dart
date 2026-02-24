@@ -153,6 +153,7 @@ class _TodoEditorPageState extends State<TodoEditorPage> {
                 ),
                 const SizedBox(height: 8),
                 SegmentedButton<Priority>(
+                  showSelectedIcon: false,
                   segments: [
                     ButtonSegment(
                       value: Priority.none,
@@ -328,49 +329,41 @@ class _TodoEditorPageState extends State<TodoEditorPage> {
               children: [
                 IconButton(
                   tooltip: 'Today',
-                  icon: const Icon(Icons.today, size: 20),
+                  icon: const Icon(Icons.today, size: 18),
                   onPressed: () => onDateChanged(today),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
                   splashRadius: 20,
                   color: Colors.amber[700],
                 ),
                 IconButton(
                   tooltip: 'Tomorrow',
-                  icon: const Icon(Icons.wb_sunny_outlined, size: 20),
+                  icon: const Icon(Icons.wb_sunny_outlined, size: 18),
                   onPressed: () => onDateChanged(tomorrow),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
                   splashRadius: 20,
                   color: Colors.blue[600],
                 ),
                 IconButton(
                   tooltip: 'End of Week (Fri)',
-                  icon: const Icon(Icons.weekend_outlined, size: 20),
+                  icon: const Icon(Icons.weekend_outlined, size: 18),
                   onPressed: () => onDateChanged(endOfWeek),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
                   splashRadius: 20,
                   color: Colors.purple[400],
                 ),
                 IconButton(
                   tooltip: 'Next Week (Mon)',
-                  icon: const Icon(Icons.next_week_outlined, size: 20),
+                  icon: const Icon(Icons.next_week_outlined, size: 18),
                   onPressed: () => onDateChanged(nextWeek),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
                   splashRadius: 20,
                   color: Colors.grey[700],
                 ),

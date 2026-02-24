@@ -62,6 +62,11 @@ class ListSettingsPageLogic extends ChangeNotifier {
     final name = nameController.text.trim();
     if (name.isEmpty) return false;
 
+    final newUrl = urlController.text.trim().isEmpty
+        ? null
+        : urlController.text.trim();
+    final urlChanged = list.calDavUrl != newUrl;
+
     // Map form fields back to list object
     list = ToDoList(
       id: list.id,
@@ -71,9 +76,7 @@ class ListSettingsPageLogic extends ChangeNotifier {
       tags: list.tags,
       syncEnabled: syncEnabled,
       // Treat empty fields as nulls to clean JSON data up
-      calDavUrl: urlController.text.trim().isEmpty
-          ? null
-          : urlController.text.trim(),
+      calDavUrl: newUrl,
       calDavUsername: userController.text.trim().isEmpty
           ? null
           : userController.text.trim(),
@@ -81,6 +84,7 @@ class ListSettingsPageLogic extends ChangeNotifier {
           ? null
           : passController.text.trim(),
       calDavCalendarId: list.calDavCalendarId, // Preserved
+      lastSync: urlChanged ? null : list.lastSync,
     );
 
     await _dataManager.saveList(list);

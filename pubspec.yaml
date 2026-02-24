@@ -47,6 +47,8 @@ dependencies:
     sdk: flutter
   window_manager: ^0.5.1
   flex_color_picker: ^3.8.0
+  flutter_launcher_icons: ^0.14.4
+  xml: ^6.6.1
 
 dev_dependencies:
 
@@ -56,6 +58,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  http_mock_adapter: ^0.6.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

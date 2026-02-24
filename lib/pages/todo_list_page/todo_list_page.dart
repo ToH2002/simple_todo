@@ -84,6 +84,23 @@ class _TodoListPageState extends State<TodoListPage> {
             title: Text(_manager.currentList!.name),
             centerTitle: true,
             actions: [
+              if (_manager.currentList!.syncEnabled)
+                IconButton(
+                  icon: _manager.isSyncing
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.onPrimary,
+                          ),
+                        )
+                      : const Icon(Icons.sync),
+                  onPressed: _manager.isSyncing
+                      ? null
+                      : () => _manager.syncCurrentList(),
+                  tooltip: 'Sync with CalDAV',
+                ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.settings),
                 onSelected: (value) async {

@@ -108,6 +108,7 @@ class TodoEditorPageManager extends ChangeNotifier {
       priority: priority,
       tags: tags,
       createDateTime: initialItem?.createDateTime ?? DateTime.now(),
+      lastModified: DateTime.now(),
       startDateTime: startDate,
       dueDateTime: dueDate,
       recurringRule: initialItem?.recurringRule,
