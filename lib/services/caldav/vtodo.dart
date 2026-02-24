@@ -120,6 +120,9 @@ class VTodo {
             line.startsWith('BEGIN:') ||
             line.startsWith('END:') ||
             line.startsWith('VERSION:') ||
+            line.startsWith('SEQUENCE:') ||
+            line.startsWith('COMPLETED:') ||
+            line.startsWith('PERCENT-COMPLETE:') ||
             line.startsWith('PRODID:');
 
         if (isKnownProperty || unwrappedLines.isEmpty) {
