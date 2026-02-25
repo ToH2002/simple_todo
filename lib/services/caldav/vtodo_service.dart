@@ -106,8 +106,12 @@ class VTodoService {
 
   /// Delete a VTODO entirely
   Future<void> delete(VTodo todo) async {
-    if (todo.href == null)
+    // print('trying to delete: ${todo.summary}');
+    // print('etag: ${todo.etag}');
+    // print('href: ${todo.href}');
+    if (todo.href == null) {
       throw const CalDavException('VTODO href is required for delete');
+    }
 
     try {
       final headers = <String, String>{};
@@ -115,9 +119,13 @@ class VTodoService {
         headers['If-Match'] = todo.etag!;
       }
 
-      await _dio.delete(
+      final _ = await _dio.request<String>(
         todo.href.toString(),
-        options: Options(headers: headers),
+        options: Options(
+          method: 'DELETE',
+          headers: headers.isNotEmpty ? headers : null,
+          responseType: ResponseType.plain,
+        ),
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return; // Already deleted

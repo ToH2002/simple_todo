@@ -49,6 +49,7 @@ dependencies:
   flex_color_picker: ^3.8.0
   flutter_launcher_icons: ^0.14.4
   xml: ^6.6.1
+  dio: ^5.9.1
 
 dev_dependencies:
 

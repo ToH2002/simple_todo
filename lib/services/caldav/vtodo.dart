@@ -104,34 +104,37 @@ class VTodo {
       } else {
         if (line.isEmpty) continue;
 
-        // Does this look like a new known property?
-        final isKnownProperty =
-            line.startsWith('UID:') ||
-            line.startsWith('SUMMARY:') ||
-            line.startsWith('DESCRIPTION:') ||
-            line.startsWith('STATUS:') ||
-            line.startsWith('PRIORITY:') ||
-            line.startsWith('CATEGORIES:') ||
-            line.startsWith('DTSTAMP:') ||
-            line.startsWith('LAST-MODIFIED:') ||
-            line.startsWith('DTSTART') ||
-            line.startsWith('DUE') ||
-            line.startsWith('RRULE:') ||
-            line.startsWith('BEGIN:') ||
-            line.startsWith('END:') ||
-            line.startsWith('VERSION:') ||
-            line.startsWith('SEQUENCE:') ||
-            line.startsWith('COMPLETED:') ||
-            line.startsWith('PERCENT-COMPLETE:') ||
-            line.startsWith('PRODID:');
+        // // Does this look like a new known property?
+        // final isKnownProperty =
+        //     line.startsWith('UID:') ||
+        //     line.startsWith('SUMMARY:') ||
+        //     line.startsWith('DESCRIPTION:') ||
+        //     line.startsWith('STATUS:') ||
+        //     line.startsWith('PRIORITY:') ||
+        //     line.startsWith('CATEGORIES:') ||
+        //     line.startsWith('DTSTAMP:') ||
+        //     line.startsWith('LAST-MODIFIED:') ||
+        //     line.startsWith('DTSTART') ||
+        //     line.startsWith('DUE') ||
+        //     line.startsWith('RRULE:') ||
+        //     line.startsWith('BEGIN:') ||
+        //     line.startsWith('END:') ||
+        //     line.startsWith('VERSION:') ||
+        //     line.startsWith('SEQUENCE:') ||
+        //     line.startsWith('COMPLETED:') ||
+        //     line.startsWith('PERCENT-COMPLETE:') ||
+        //     line.startsWith('PRODID:');
 
-        if (isKnownProperty || unwrappedLines.isEmpty) {
-          unwrappedLines.add(line);
-        } else {
-          // This is a non-standard literal line break in the middle of a property (likely DESCRIPTION)
-          // We encode it as \\n so the property unescaper handles it uniformly below.
-          unwrappedLines.last += '\\n$line';
-        }
+        // if (isKnownProperty || unwrappedLines.isEmpty) {
+        //   unwrappedLines.add(line);
+        // } else {
+        //   // This is a non-standard literal line break in the middle of a property (likely DESCRIPTION)
+        //   // We encode it as \\n so the property unescaper handles it uniformly below.
+        //   unwrappedLines.last += '\\n$line';
+        // }
+
+        // alternative: always treat like well-formed VTODO
+        unwrappedLines.add(line);
       }
     }
 
