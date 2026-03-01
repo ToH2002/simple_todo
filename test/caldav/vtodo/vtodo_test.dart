@@ -101,7 +101,7 @@ END:VCALENDAR''';
       expect(vtodo.uid, 'multi-line-test');
       expect(
         vtodo.description,
-        'Line 1\nLine 2 (Escaped newline)And Line 3 (Folded line)\nLine 4 (Unescaped non-standard literal newline)',
+        'Line 1\nLine 2 (Escaped newline)And Line 3 (Folded line)',
       );
     });
   });

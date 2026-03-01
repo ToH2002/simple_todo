@@ -13,9 +13,9 @@ class ToDoItem {
   final DateTime createDateTime;
   DateTime lastModified;
   bool isDeleted; // Soft-delete flag for syncing
-  final DateTime? startDateTime;
-  final DateTime? dueDateTime;
-  final String? recurringRule;
+  DateTime? startDateTime;
+  DateTime? dueDateTime;
+  String? recurringRule;
 
   ToDoItem({
     required this.id,

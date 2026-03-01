@@ -4,6 +4,7 @@ import '../../services/caldav_service.dart';
 import '../../data/data_manager.dart';
 import '../../data/todo_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:rrule/rrule.dart';
 
 class TodoListPageManager extends ChangeNotifier {
   final DataManager _dataManager = getIt<DataManager>();
@@ -86,6 +87,20 @@ class TodoListPageManager extends ChangeNotifier {
       // Reload the local UI state
       currentList = updatedList;
       allItems = List.from(currentList!.items);
+
+      // Make sure all tags used by items exist in the main list
+      bool tagsUpdated = false;
+      for (var item in allItems) {
+        for (var tag in item.tags) {
+          if (!currentList!.tags.contains(tag)) {
+            currentList!.tags.add(tag);
+            tagsUpdated = true;
+          }
+        }
+      }
+      if (tagsUpdated) {
+        await _dataManager.saveList(currentList!);
+      }
     } catch (e) {
       print('Manual sync failed: $e');
     } finally {
@@ -238,7 +253,68 @@ class TodoListPageManager extends ChangeNotifier {
     // Find the item and update
     final index = currentList!.items.indexWhere((i) => i.id == item.id);
     if (index != -1) {
-      currentList!.items[index].isDone = isDone ?? false;
+      if (isDone == true &&
+          currentList!.items[index].recurringRule != null &&
+          currentList!.items[index].recurringRule!.isNotEmpty) {
+        bool rollOver = false;
+        try {
+          final ruleString = currentList!.items[index].recurringRule!;
+          final fromDoneDate = ruleString.startsWith('X-FROM-DONE-DATE=TRUE;');
+          final actualRuleStr = ruleString
+              .replaceAll('X-FROM-DONE-DATE=TRUE;', '')
+              .replaceAll('RRULE:', '');
+          final safeParseStr = 'RRULE:$actualRuleStr';
+          final rrule = RecurrenceRule.fromString(safeParseStr);
+
+          final baseDate = fromDoneDate
+              ? DateTime.now()
+              : (currentList!.items[index].dueDateTime ?? DateTime.now());
+
+          final instances = rrule.getInstances(
+            start: baseDate.copyWith(microsecond: 0).toUtc(),
+            after: baseDate.copyWith(microsecond: 0).toUtc(),
+            includeAfter: false,
+          );
+
+          if (instances.isNotEmpty) {
+            final nextDate = instances.first.toLocal();
+
+            DateTime? nextDueDate = nextDate; // We only update the Due Date now
+
+            String? newRuleString = currentList!.items[index].recurringRule;
+            bool reachedEnd = false;
+
+            if (rrule.count != null && rrule.count! > 0) {
+              int newCount = rrule.count! - 1;
+              if (newCount == 0) {
+                reachedEnd = true;
+              } else {
+                final updatedRule = rrule.copyWith(count: newCount);
+                newRuleString =
+                    (fromDoneDate ? 'X-FROM-DONE-DATE=TRUE;' : '') +
+                    updatedRule.toString().replaceAll('RRULE:', '');
+              }
+            }
+
+            if (!reachedEnd) {
+              // Due date is updated, start date logic is left alone
+              currentList!.items[index].dueDateTime = nextDueDate;
+              currentList!.items[index].recurringRule = newRuleString;
+              currentList!.items[index].isDone = false; // Stay incomplete
+              rollOver = true;
+            }
+          }
+        } catch (e) {
+          print('Error rolling over recurring task: \$e');
+        }
+
+        if (!rollOver) {
+          currentList!.items[index].isDone = true;
+        }
+      } else {
+        currentList!.items[index].isDone = isDone ?? false;
+      }
+
       currentList!.items[index].lastModified = DateTime.now();
 
       // Update local cache

@@ -274,11 +274,8 @@ class CalDavService {
       // 4. Evaluate remaining remote items (These exist on server but not locally -> Pull them down)
       for (final remoteItem in remoteTodos) {
         if (!processedRemoteIds.contains(remoteItem.uid)) {
-          // Special Master Tag List Handler
+          // Skip legacy Master Tag List items
           if (remoteItem.uid == '\$MASTER_TAG_LIST\$') {
-            // We found the hidden tag list, don't add it as a ToDoItem, just update the tags array
-            localList.tags.clear();
-            localList.tags.addAll(remoteItem.categories);
             continue;
           }
 
@@ -289,29 +286,7 @@ class CalDavService {
         }
       }
 
-      // 5. Sync the Master Tag List
-      // We always push our current tag list to the server as the source of truth if we made it this far
-      final tagListUid = '\$MASTER_TAG_LIST\$';
-      final tagVTodo = VTodo(
-        uid: tagListUid,
-        summary: 'Hidden Tag Registry',
-        categories: localList.tags,
-        dtstamp: DateTime.now().toUtc(),
-      );
-
-      if (remoteMap.containsKey(tagListUid)) {
-        await vTodoService.update(
-          VTodo.fromIcalendar(
-            tagVTodo.toIcalendar(),
-            href: remoteMap[tagListUid]!.href,
-            etag: remoteMap[tagListUid]!.etag,
-          ),
-        );
-      } else {
-        await vTodoService.create(calendarUri, tagVTodo);
-      }
-
-      // 6. Return the updated list object (Does not automatically save to JSON, the UI controller handled that)
+      // Return the updated list object (Does not automatically save to JSON, the UI controller handled that)
       return ToDoList(
         id: localList.id,
         name: localList.name,

@@ -4,6 +4,7 @@ import 'todo_editor_page_logic.dart';
 import 'package:intl/intl.dart';
 import '../../services/service_locator.dart';
 import '../../data/data_manager.dart';
+import '../recurrence_editor_page/recurrence_editor_page.dart';
 
 class TodoEditorPage extends StatefulWidget {
   final ToDoItem? item;
@@ -209,6 +210,59 @@ class _TodoEditorPageState extends State<TodoEditorPage> {
                   title: 'Due Date',
                   currentDate: _manager.dueDate,
                   onDateChanged: _manager.setDueDate,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Repeat',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.repeat, color: Colors.grey[700]),
+                  title: Text(
+                    _manager.recurringRule == null
+                        ? 'Does not repeat'
+                        : 'Repeat',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  subtitle: _manager.recurringRule == null
+                      ? null
+                      : Text(
+                          _manager.formattedRepeat,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_manager.recurringRule != null)
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.red),
+                          onPressed: () => _manager.setRecurringRule(null),
+                        ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RecurrenceEditorPage(
+                          initialRule: _manager.recurringRule,
+                          dueDate: _manager.dueDate ?? DateTime.now(),
+                        ),
+                      ),
+                    ).then((result) {
+                      if (result != null && result is Map) {
+                        _manager.setRecurringRule(result['rule'] as String?);
+                        if (result['dueDate'] != null) {
+                          _manager.setDueDate(result['dueDate'] as DateTime);
+                        }
+                      }
+                    });
+                  },
                 ),
                 const SizedBox(height: 24),
                 const Text(

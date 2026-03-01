@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../data/todo_models.dart';
 import 'package:uuid/uuid.dart';
+import 'package:rrule/rrule.dart';
 
 import '../../services/service_locator.dart';
 import '../../data/data_manager.dart';
@@ -14,6 +15,7 @@ class TodoEditorPageManager extends ChangeNotifier {
   late Priority priority;
   DateTime? startDate;
   DateTime? dueDate;
+  String? recurringRule;
   List<String> tags = [];
 
   TodoEditorPageManager({this.initialItem, required this.listId}) {
@@ -22,6 +24,7 @@ class TodoEditorPageManager extends ChangeNotifier {
     priority = initialItem?.priority ?? Priority.normal;
     startDate = initialItem?.startDateTime;
     dueDate = initialItem?.dueDateTime;
+    recurringRule = initialItem?.recurringRule;
     tags = List.from(initialItem?.tags ?? []);
     prioritizeTags();
   }
@@ -86,6 +89,37 @@ class TodoEditorPageManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setRecurringRule(String? rule) {
+    recurringRule = rule;
+    notifyListeners();
+  }
+
+  String get formattedRepeat {
+    if (recurringRule == null || recurringRule!.isEmpty)
+      return 'Does not repeat';
+    try {
+      final actualRuleStr = recurringRule!
+          .replaceAll('X-FROM-DONE-DATE=TRUE;', '')
+          .replaceAll('RRULE:', '');
+      final safeParseStr = 'RRULE:$actualRuleStr';
+      final rrule = RecurrenceRule.fromString(safeParseStr);
+      switch (rrule.frequency) {
+        case Frequency.daily:
+          return 'Daily';
+        case Frequency.weekly:
+          return 'Weekly';
+        case Frequency.monthly:
+          return 'Monthly';
+        case Frequency.yearly:
+          return 'Yearly';
+        default:
+          return 'Custom Repeat';
+      }
+    } catch (e) {
+      return 'Custom Repeat';
+    }
+  }
+
   void addTag(String tag) {
     if (!tags.contains(tag)) {
       tags.add(tag);
@@ -111,7 +145,7 @@ class TodoEditorPageManager extends ChangeNotifier {
       lastModified: DateTime.now(),
       startDateTime: startDate,
       dueDateTime: dueDate,
-      recurringRule: initialItem?.recurringRule,
+      recurringRule: recurringRule,
     );
   }
 
