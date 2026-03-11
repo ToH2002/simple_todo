@@ -92,6 +92,7 @@ class ToDoList {
   String? calDavPassword;
   String? calDavCalendarId;
   DateTime? lastSync;
+  int orderIndex;
 
   ToDoList({
     required this.id,
@@ -105,6 +106,7 @@ class ToDoList {
     this.calDavPassword,
     this.calDavCalendarId,
     this.lastSync,
+    this.orderIndex = 0,
   }) : items = items ?? [],
        tags = tags ?? [];
 
@@ -121,6 +123,7 @@ class ToDoList {
       'calDavPassword': calDavPassword,
       'calDavCalendarId': calDavCalendarId,
       'lastSync': lastSync?.toIso8601String(),
+      'orderIndex': orderIndex,
     };
   }
 
@@ -141,6 +144,7 @@ class ToDoList {
       lastSync: json['lastSync'] != null
           ? DateTime.parse(json['lastSync'])
           : null,
+      orderIndex: json['orderIndex'] ?? 0,
     );
   }
 }

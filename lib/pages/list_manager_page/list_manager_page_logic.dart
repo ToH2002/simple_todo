@@ -34,4 +34,19 @@ class ListManagerPageLogic extends ChangeNotifier {
     await _dataManager.deleteList(listId);
     await loadLists();
   }
+
+  Future<void> reorderLists(int oldIndex, int newIndex) async {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final ToDoList item = lists.removeAt(oldIndex);
+    lists.insert(newIndex, item);
+
+    // Persist new order indices
+    for (int i = 0; i < lists.length; i++) {
+      lists[i].orderIndex = i;
+      await _dataManager.saveList(lists[i]);
+    }
+    notifyListeners();
+  }
 }

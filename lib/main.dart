@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'pages/todo_list_page/todo_list_page.dart';
@@ -97,6 +98,19 @@ class _SimpleTodoAppState extends State<SimpleTodoApp> with WindowListener {
         ),
         textTheme: GoogleFonts.robotoTextTheme(Theme.of(context).textTheme),
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale(
+          'en',
+          'GB',
+        ), // English-UK locale forces Monday as first day of week.
+        Locale('en', 'US'),
+      ],
+      locale: const Locale('en', 'GB'), // Force English-GB globally
       home: const TodoListPage(),
     );
   }

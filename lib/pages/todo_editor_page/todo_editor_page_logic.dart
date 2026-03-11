@@ -34,11 +34,13 @@ class TodoEditorPageManager extends ChangeNotifier {
   }
 
   List<String> availableTags = [];
+  String? listName;
 
   Future<void> loadAvailableTags() async {
     final dataManager = getIt<DataManager>();
     final list = await dataManager.getList(listId);
     if (list != null) {
+      listName = list.name;
       final Set<String> combinedTags = {};
       combinedTags.addAll(list.tags);
       combinedTags.addAll(tags);

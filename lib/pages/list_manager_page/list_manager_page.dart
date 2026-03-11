@@ -68,11 +68,13 @@ class _ListManagerPageState extends State<ListManagerPage> {
               ), // Returning true instructs previous page to refresh
             ),
           ),
-          body: ListView.builder(
+          body: ReorderableListView.builder(
             itemCount: _manager.lists.length,
+            onReorder: _manager.reorderLists,
             itemBuilder: (context, index) {
               final list = _manager.lists[index];
               return ListTile(
+                key: ValueKey(list.id),
                 leading: Icon(Icons.list_alt, color: list.color),
                 title: Text(list.name),
                 subtitle: Text(
@@ -114,7 +116,7 @@ class _ListManagerPageState extends State<ListManagerPage> {
                                 builder: (context) => AlertDialog(
                                   title: const Text('Delete List?'),
                                   content: Text(
-                                    'Are you sure you want to permanently delete "${list.name}" and all its ToDo items?',
+                                    'Are you sure you want to permanently delete "\${list.name}" and all its ToDo items?',
                                   ),
                                   actions: [
                                     TextButton(
@@ -138,6 +140,11 @@ class _ListManagerPageState extends State<ListManagerPage> {
                               }
                             }
                           : null, // Disable delete if it's the last list
+                    ),
+                    const SizedBox(width: 8),
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: const Icon(Icons.drag_handle, color: Colors.grey),
                     ),
                   ],
                 ),

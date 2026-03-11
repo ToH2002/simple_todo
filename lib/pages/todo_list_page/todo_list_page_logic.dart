@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/service_locator.dart';
 import '../../services/caldav_service.dart';
@@ -5,6 +6,8 @@ import '../../data/data_manager.dart';
 import '../../data/todo_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rrule/rrule.dart';
+import '../../data/settings_manager.dart';
+import 'consolidated_due_list_logic.dart';
 
 class TodoListPageManager extends ChangeNotifier {
   final DataManager _dataManager = getIt<DataManager>();
@@ -16,9 +19,30 @@ class TodoListPageManager extends ChangeNotifier {
   String currentTagFilter = 'All'; // 'All' means no tag filter applied
   bool showCompletedItems = false;
   bool isSyncing = false;
+  Timer? _autoSyncTimer;
 
   TodoListPageManager() {
     loadLists();
+    _setupAutoSync();
+    getIt<SettingsManager>().addListener(_setupAutoSync);
+  }
+
+  void _setupAutoSync() {
+    _autoSyncTimer?.cancel();
+    final settings = getIt<SettingsManager>();
+    if (settings.autoSync) {
+      _autoSyncTimer = Timer.periodic(
+        Duration(minutes: settings.syncFrequency),
+        (_) => syncCurrentList(),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoSyncTimer?.cancel();
+    getIt<SettingsManager>().removeListener(_setupAutoSync);
+    super.dispose();
   }
 
   Future<void> loadLists() async {
@@ -26,16 +50,26 @@ class TodoListPageManager extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
 
     if (currentList != null) {
-      // Check if current list still exists or was updated
-      final updatedList = await _dataManager.getList(currentList!.id);
-      if (updatedList != null) {
-        currentList = updatedList;
+      if (currentList!.id == 'consolidated_due_list') {
+        final dueLogic = getIt<ConsolidatedDueListLogic>();
+        await dueLogic.loadConsolidatedList();
+        currentList = dueLogic.virtualList;
       } else {
-        currentList = allLists.isNotEmpty ? allLists.first : null;
+        // Check if current list still exists or was updated
+        final updatedList = await _dataManager.getList(currentList!.id);
+        if (updatedList != null) {
+          currentList = updatedList;
+        } else {
+          currentList = allLists.isNotEmpty ? allLists.first : null;
+        }
       }
     } else {
       final savedId = prefs.getString('last_active_list_id');
-      if (savedId != null) {
+      if (savedId == 'consolidated_due_list') {
+        final dueLogic = getIt<ConsolidatedDueListLogic>();
+        await dueLogic.loadConsolidatedList();
+        currentList = dueLogic.virtualList;
+      } else if (savedId != null) {
         final savedList = await _dataManager.getList(savedId);
         currentList =
             savedList ?? (allLists.isNotEmpty ? allLists.first : null);
@@ -68,41 +102,55 @@ class TodoListPageManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> syncCurrentList() async {
-    if (currentList == null ||
-        !currentList!.syncEnabled ||
-        currentList!.calDavUrl == null)
-      return;
+  Future<String?> syncCurrentList() async {
+    final settings = getIt<SettingsManager>();
+
+    List<ToDoList> listsToSync = [];
+    if (settings.alwaysSyncAll ||
+        (currentList?.id == 'consolidated_due_list')) {
+      listsToSync = allLists
+          .where((l) => l.syncEnabled && l.calDavUrl != null)
+          .toList();
+    } else if (currentList != null &&
+        currentList!.syncEnabled &&
+        currentList!.calDavUrl != null) {
+      listsToSync = [currentList!];
+    }
+
+    if (listsToSync.isEmpty) return null;
 
     isSyncing = true;
     notifyListeners();
 
     try {
       final calDavService = getIt<CalDavService>();
-      final updatedList = await calDavService.syncList(currentList!);
 
-      // Save the merged data to storage
-      await _dataManager.saveList(updatedList);
+      for (var list in listsToSync) {
+        final updatedList = await calDavService.syncList(list);
+        await _dataManager.saveList(updatedList);
 
-      // Reload the local UI state
-      currentList = updatedList;
-      allItems = List.from(currentList!.items);
-
-      // Make sure all tags used by items exist in the main list
-      bool tagsUpdated = false;
-      for (var item in allItems) {
-        for (var tag in item.tags) {
-          if (!currentList!.tags.contains(tag)) {
-            currentList!.tags.add(tag);
-            tagsUpdated = true;
+        // If this was the current active list (or consolidated logic applies to it)
+        // we should refresh local UI variables. We'll simply process tags and update refs.
+        bool tagsUpdated = false;
+        for (var item in updatedList.items) {
+          for (var tag in item.tags) {
+            if (!updatedList.tags.contains(tag)) {
+              updatedList.tags.add(tag);
+              tagsUpdated = true;
+            }
           }
         }
+        if (tagsUpdated) {
+          await _dataManager.saveList(updatedList);
+        }
       }
-      if (tagsUpdated) {
-        await _dataManager.saveList(currentList!);
-      }
+
+      // Reload lists from storage to refresh UI
+      await loadLists();
+      return null;
     } catch (e) {
-      print('Manual sync failed: $e');
+      print('Manual sync failed: \$e');
+      return 'Problems during sync - see log';
     } finally {
       isSyncing = false;
       notifyListeners();
@@ -110,10 +158,20 @@ class TodoListPageManager extends ChangeNotifier {
   }
 
   Future<void> switchList(String listId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (listId == 'consolidated_due_list') {
+      final dueLogic = getIt<ConsolidatedDueListLogic>();
+      await dueLogic.loadConsolidatedList();
+      currentList = dueLogic.virtualList;
+      allItems = List.from(currentList?.items ?? []);
+      await prefs.setString('last_active_list_id', listId);
+      notifyListeners();
+      return;
+    }
+
     final list = await _dataManager.getList(listId);
     if (list != null) {
       currentList = list;
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_active_list_id', listId);
       await loadLists();
     }
@@ -247,98 +305,143 @@ class TodoListPageManager extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleItemDone(ToDoItem item, bool? isDone) async {
-    if (currentList == null) return;
+  Future<void> toggleItemDone(ToDoItem currentItem, bool? value) async {
+    if (currentItem.isDone == (value ?? false)) return;
 
-    // Find the item and update
-    final index = currentList!.items.indexWhere((i) => i.id == item.id);
-    if (index != -1) {
-      if (isDone == true &&
-          currentList!.items[index].recurringRule != null &&
-          currentList!.items[index].recurringRule!.isNotEmpty) {
-        bool rollOver = false;
-        try {
-          final ruleString = currentList!.items[index].recurringRule!;
-          final fromDoneDate = ruleString.startsWith('X-FROM-DONE-DATE=TRUE;');
-          final actualRuleStr = ruleString
-              .replaceAll('X-FROM-DONE-DATE=TRUE;', '')
-              .replaceAll('RRULE:', '');
-          final safeParseStr = 'RRULE:$actualRuleStr';
-          final rrule = RecurrenceRule.fromString(safeParseStr);
+    final targetList = await _dataManager.getList(currentItem.listId);
+    if (targetList == null) return;
 
-          final baseDate = fromDoneDate
-              ? DateTime.now()
-              : (currentList!.items[index].dueDateTime ?? DateTime.now());
+    final index = targetList.items.indexWhere((i) => i.id == currentItem.id);
+    if (index == -1) return;
 
-          final instances = rrule.getInstances(
-            start: baseDate.copyWith(microsecond: 0).toUtc(),
-            after: baseDate.copyWith(microsecond: 0).toUtc(),
-            includeAfter: false,
+    // Handle recurring items
+    if (value == true &&
+        targetList.items[index].recurringRule != null &&
+        targetList.items[index].recurringRule!.isNotEmpty) {
+      bool rollOver = false;
+      try {
+        final ruleString = targetList.items[index].recurringRule!;
+        final fromDoneDate = ruleString.startsWith('X-FROM-DONE-DATE=TRUE;');
+        final actualRuleStr = ruleString
+            .replaceAll('X-FROM-DONE-DATE=TRUE;', '')
+            .replaceAll('RRULE:', '');
+        final safeParseStr = 'RRULE:$actualRuleStr';
+        final rrule = RecurrenceRule.fromString(safeParseStr);
+
+        final baseDate = fromDoneDate
+            ? DateTime.now()
+            : (targetList.items[index].dueDateTime ?? DateTime.now());
+
+        // Use floating UTC to prevent timezone offsets from drifting rules over midnight
+        final floatingBase = DateTime.utc(
+          baseDate.year,
+          baseDate.month,
+          baseDate.day,
+          baseDate.hour,
+          baseDate.minute,
+          baseDate.second,
+        );
+
+        final instances = rrule.getInstances(
+          start: floatingBase,
+          after: floatingBase,
+          includeAfter: false,
+        );
+
+        if (instances.isNotEmpty) {
+          final nextFloating = instances.first;
+          final nextDueDate = DateTime(
+            nextFloating.year,
+            nextFloating.month,
+            nextFloating.day,
+            nextFloating.hour,
+            nextFloating.minute,
+            nextFloating.second,
           );
 
-          if (instances.isNotEmpty) {
-            final nextDate = instances.first.toLocal();
+          String? newRuleString = targetList.items[index].recurringRule;
+          bool reachedEnd = false;
 
-            DateTime? nextDueDate = nextDate; // We only update the Due Date now
-
-            String? newRuleString = currentList!.items[index].recurringRule;
-            bool reachedEnd = false;
-
-            if (rrule.count != null && rrule.count! > 0) {
-              int newCount = rrule.count! - 1;
-              if (newCount == 0) {
-                reachedEnd = true;
-              } else {
-                final updatedRule = rrule.copyWith(count: newCount);
-                newRuleString =
-                    (fromDoneDate ? 'X-FROM-DONE-DATE=TRUE;' : '') +
-                    updatedRule.toString().replaceAll('RRULE:', '');
-              }
-            }
-
-            if (!reachedEnd) {
-              // Due date is updated, start date logic is left alone
-              currentList!.items[index].dueDateTime = nextDueDate;
-              currentList!.items[index].recurringRule = newRuleString;
-              currentList!.items[index].isDone = false; // Stay incomplete
-              rollOver = true;
+          if (rrule.count != null && rrule.count! > 0) {
+            int newCount = rrule.count! - 1;
+            if (newCount == 0) {
+              reachedEnd = true;
+            } else {
+              final updatedRule = rrule.copyWith(count: newCount);
+              newRuleString =
+                  (fromDoneDate ? 'X-FROM-DONE-DATE=TRUE;' : '') +
+                  updatedRule.toString().replaceAll('RRULE:', '');
             }
           }
-        } catch (e) {
-          print('Error rolling over recurring task: \$e');
-        }
 
-        if (!rollOver) {
-          currentList!.items[index].isDone = true;
+          if (!reachedEnd) {
+            final oldDueDate = targetList.items[index].dueDateTime;
+            if (oldDueDate != null &&
+                targetList.items[index].startDateTime != null) {
+              final diff = nextDueDate.difference(oldDueDate);
+              targetList.items[index].startDateTime = targetList
+                  .items[index]
+                  .startDateTime!
+                  .add(diff);
+            }
+
+            targetList.items[index].dueDateTime = nextDueDate;
+            targetList.items[index].recurringRule = newRuleString;
+            targetList.items[index].isDone = false; // Stay incomplete
+            rollOver = true;
+          }
         }
-      } else {
-        currentList!.items[index].isDone = isDone ?? false;
+      } catch (e) {
+        print('Error rolling over recurring task: $e');
       }
 
-      currentList!.items[index].lastModified = DateTime.now();
+      if (!rollOver) {
+        targetList.items[index].isDone = true;
+      }
+    } else {
+      targetList.items[index].isDone = value ?? false;
+    }
 
-      // Update local cache
-      allItems = List.from(currentList!.items);
+    targetList.items[index].lastModified = DateTime.now();
 
-      // Save
-      await _dataManager.saveList(currentList!);
+    await _dataManager.saveList(targetList);
+
+    // If we are currently in the consolidated list view, we need to refresh it globally
+    if (currentList?.id == 'consolidated_due_list') {
+      final dueLogic = getIt<ConsolidatedDueListLogic>();
+      await dueLogic.loadConsolidatedList();
+      currentList = dueLogic.virtualList;
+      allItems = List.from(currentList?.items ?? []);
       notifyListeners();
+    } else {
+      await loadLists();
     }
   }
 
   Future<void> saveOrUpdateItem(ToDoItem item) async {
     if (currentList == null) return;
 
-    final index = currentList!.items.indexWhere((i) => i.id == item.id);
+    final targetList = await _dataManager.getList(item.listId);
+    if (targetList == null) return;
+
+    final index = targetList.items.indexWhere((i) => i.id == item.id);
     if (index != -1) {
-      currentList!.items[index] = item;
+      targetList.items[index] = item;
     } else {
-      currentList!.items.add(item);
+      targetList.items.add(item);
     }
 
-    allItems = List.from(currentList!.items);
-    await _dataManager.saveList(currentList!);
-    notifyListeners();
+    await _dataManager.saveList(targetList);
+
+    if (currentList!.id == 'consolidated_due_list') {
+      final dueLogic = getIt<ConsolidatedDueListLogic>();
+      await dueLogic.loadConsolidatedList();
+      currentList = dueLogic.virtualList;
+      allItems = List.from(currentList?.items ?? []);
+      notifyListeners();
+    } else {
+      await loadLists();
+    }
   }
 
   void toggleShowCompletedItems() {
@@ -348,6 +451,7 @@ class TodoListPageManager extends ChangeNotifier {
 
   Future<void> deleteCompletedItems() async {
     if (currentList == null) return;
+    if (currentList!.id == 'consolidated_due_list') return;
 
     if (currentList!.syncEnabled) {
       for (var item in currentList!.items) {
@@ -368,19 +472,30 @@ class TodoListPageManager extends ChangeNotifier {
   Future<void> deleteItem(ToDoItem item) async {
     if (currentList == null) return;
 
-    if (currentList!.syncEnabled) {
-      final index = currentList!.items.indexWhere((i) => i.id == item.id);
+    final targetList = await _dataManager.getList(item.listId);
+    if (targetList == null) return;
+
+    if (targetList.syncEnabled) {
+      final index = targetList.items.indexWhere((i) => i.id == item.id);
       if (index != -1) {
-        currentList!.items[index].isDeleted = true;
-        currentList!.items[index].lastModified = DateTime.now();
+        targetList.items[index].isDeleted = true;
+        targetList.items[index].lastModified = DateTime.now();
       }
     } else {
-      currentList!.items.removeWhere((i) => i.id == item.id);
+      targetList.items.removeWhere((i) => i.id == item.id);
     }
 
-    allItems = List.from(currentList!.items);
-    await _dataManager.saveList(currentList!);
-    notifyListeners();
+    await _dataManager.saveList(targetList);
+
+    if (currentList!.id == 'consolidated_due_list') {
+      final dueLogic = getIt<ConsolidatedDueListLogic>();
+      await dueLogic.loadConsolidatedList();
+      currentList = dueLogic.virtualList;
+      allItems = List.from(currentList?.items ?? []);
+      notifyListeners();
+    } else {
+      await loadLists();
+    }
   }
 
   Future<void> addListTag(String tag) async {

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../data/todo_models.dart';
+import '../../data/settings_manager.dart';
+import '../../services/service_locator.dart';
+import '../settings_page/settings_page.dart';
 import '../todo_editor_page/todo_editor_page.dart';
+import 'consolidated_due_list_logic.dart';
 import '../list_manager_page/list_manager_page.dart';
 import 'todo_list_page_logic.dart';
 import 'package:intl/intl.dart';
@@ -63,7 +67,7 @@ class _TodoListPageState extends State<TodoListPage> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: _manager,
+      listenable: Listenable.merge([_manager, getIt<SettingsManager>()]),
       builder: (context, _) {
         if (_manager.currentList == null) {
           return const Scaffold(
@@ -84,7 +88,8 @@ class _TodoListPageState extends State<TodoListPage> {
             title: Text(_manager.currentList!.name),
             centerTitle: true,
             actions: [
-              if (_manager.currentList!.syncEnabled)
+              if (_manager.currentList!.syncEnabled ||
+                  _manager.currentList!.id == 'consolidated_due_list')
                 IconButton(
                   icon: _manager.isSyncing
                       ? SizedBox(
@@ -98,7 +103,17 @@ class _TodoListPageState extends State<TodoListPage> {
                       : const Icon(Icons.sync),
                   onPressed: _manager.isSyncing
                       ? null
-                      : () => _manager.syncCurrentList(),
+                      : () async {
+                          final error = await _manager.syncCurrentList();
+                          if (error != null && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(error),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
                   tooltip: 'Sync with CalDAV',
                 ),
               PopupMenuButton<String>(
@@ -194,6 +209,23 @@ class _TodoListPageState extends State<TodoListPage> {
                     ),
                   ),
                 ),
+                if (getIt<SettingsManager>().showConsolidatedDueList)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.all_inbox,
+                      color: Colors.blueGrey,
+                    ),
+                    title: const Text('Due Tasks'),
+                    selected:
+                        _manager.currentList?.id == 'consolidated_due_list',
+                    selectedTileColor: Theme.of(
+                      context,
+                    ).primaryColor.withOpacity(0.1),
+                    onTap: () {
+                      _manager.switchList('consolidated_due_list');
+                      Navigator.pop(context); // Close drawer
+                    },
+                  ),
                 ..._manager.allLists.map((list) {
                   return ListTile(
                     leading: Icon(Icons.list, color: list.color),
@@ -210,7 +242,7 @@ class _TodoListPageState extends State<TodoListPage> {
                 }),
                 const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.settings),
+                  leading: const Icon(Icons.list_alt),
                   title: const Text('Manage Lists'),
                   onTap: () {
                     Navigator.pop(context); // Close drawer
@@ -235,6 +267,20 @@ class _TodoListPageState extends State<TodoListPage> {
                     _showTagEditorDialog(context);
                   },
                 ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.settings),
+                  title: const Text('App Settings'),
+                  onTap: () {
+                    Navigator.pop(context); // Close drawer
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsPage(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -255,23 +301,99 @@ class _TodoListPageState extends State<TodoListPage> {
               ),
             ],
           ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      TodoEditorPage(listId: _manager.currentList!.id),
+          floatingActionButton:
+              _manager.currentList?.id == 'consolidated_due_list'
+              ? null
+              : FloatingActionButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            TodoEditorPage(listId: _manager.currentList!.id),
+                      ),
+                    ).then((_) async {
+                      await _manager.loadLists();
+                      _manager.setFilter(_manager.currentFilter);
+                    });
+                  },
+                  child: const Icon(Icons.add),
                 ),
-              ).then((_) async {
-                await _manager.loadLists();
-                _manager.setFilter(_manager.currentFilter);
-              });
-            },
-            child: const Icon(Icons.add),
-          ),
+          bottomNavigationBar: getIt<SettingsManager>().showQuickListSelector
+              ? _buildQuickListSelector()
+              : null,
         );
       },
+    );
+  }
+
+  Widget _buildQuickListSelector() {
+    return Container(
+      height: 36,
+      width: double.infinity,
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Row(
+        children: [
+          // Consolidated Due List Chip
+          if (getIt<SettingsManager>().showConsolidatedDueList)
+            Expanded(
+              child: _buildListChip(
+                id: 'consolidated_due_list',
+                name: 'Due Tasks',
+                color: Colors.grey.shade400,
+              ),
+            ),
+
+          // Custom Lists
+          ..._manager.allLists.map((list) {
+            return Expanded(
+              child: _buildListChip(
+                id: list.id,
+                name: list.name,
+                color: list.color,
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListChip({
+    required String id,
+    required String name,
+    required Color color,
+  }) {
+    final isSelected = _manager.currentList?.id == id;
+    final displayName = name.length > 15 ? '${name.substring(0, 12)}...' : name;
+
+    final brightness = ThemeData.estimateBrightnessForColor(color);
+    final textColor = brightness == Brightness.dark
+        ? Colors.white
+        : Colors.black;
+
+    return InkWell(
+      onTap: () {
+        if (!isSelected) {
+          _manager.switchList(id);
+        }
+      },
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+        alignment: Alignment.center,
+        color: color,
+        child: Text(
+          displayName,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w500,
+            fontSize: 13,
+          ),
+        ),
+      ),
     );
   }
 
@@ -454,23 +576,8 @@ class _TodoListPageState extends State<TodoListPage> {
         onLongPress: () {
           _showContextMenu(context, item, _tapPosition);
         },
-        child: ListTile(
-          leading: Checkbox(
-            value: item.isDone,
-            activeColor: priorityColor,
-            side: BorderSide(color: priorityColor, width: 2.0),
-            onChanged: (bool? value) {
-              _manager.toggleItemDone(item, value);
-            },
-          ),
-          title: Text(
-            item.title,
-            style: TextStyle(
-              decoration: item.isDone ? TextDecoration.lineThrough : null,
-              color: item.isDone ? Colors.grey : Colors.black,
-            ),
-          ),
-          subtitle: item.tags.isNotEmpty
+        child: () {
+          Widget? sub = item.tags.isNotEmpty
               ? Row(
                   children:
                       (List<String>.from(item.tags)..sort(
@@ -504,25 +611,86 @@ class _TodoListPageState extends State<TodoListPage> {
                           )
                           .toList(),
                 )
-              : null,
-          trailing: item.dueDateTime != null
-              ? _buildSmartDateText(item.dueDateTime!, item.isDone)
-              : null,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TodoEditorPage(
-                  item: item,
-                  listId: _manager.currentList!.id,
+              : null;
+
+          if (_manager.currentList?.id == 'consolidated_due_list') {
+            final sourceLogic = getIt<ConsolidatedDueListLogic>();
+            final sourceList = sourceLogic.sourceLists[item.listId];
+            if (sourceList != null) {
+              final sourceIndicator = Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  'From: ${sourceList.name}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: sourceList.color,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
+              );
+
+              sub = sub == null
+                  ? sourceIndicator
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [sub, sourceIndicator],
+                    );
+            }
+          }
+
+          Widget tile = ListTile(
+            leading: Checkbox(
+              value: item.isDone,
+              activeColor: priorityColor,
+              side: BorderSide(color: priorityColor, width: 2.0),
+              onChanged: (bool? value) {
+                _manager.toggleItemDone(item, value);
+              },
+            ),
+            title: Text(
+              item.title,
+              style: TextStyle(
+                decoration: item.isDone ? TextDecoration.lineThrough : null,
+                color: item.isDone ? Colors.grey : Colors.black,
               ),
-            ).then((_) async {
-              await _manager.loadLists();
-              _manager.setFilter(_manager.currentFilter);
-            });
-          },
-        ),
+            ),
+            subtitle: sub,
+            trailing: item.dueDateTime != null
+                ? _buildSmartDateText(item.dueDateTime!, item.isDone)
+                : null,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TodoEditorPage(
+                    item: item,
+                    listId: item.listId, // Always use the item's native list ID
+                  ),
+                ),
+              ).then((_) async {
+                await _manager.loadLists();
+                _manager.setFilter(_manager.currentFilter);
+              });
+            },
+          );
+
+          if (_manager.currentList?.id == 'consolidated_due_list') {
+            final sourceList =
+                getIt<ConsolidatedDueListLogic>().sourceLists[item.listId];
+            if (sourceList != null) {
+              tile = Container(
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(color: sourceList.color, width: 4.0),
+                  ),
+                ),
+                child: tile,
+              );
+            }
+          }
+
+          return tile;
+        }(),
       ),
     );
   }

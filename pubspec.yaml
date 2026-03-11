@@ -51,6 +51,8 @@ dependencies:
   xml: ^6.6.1
   dio: ^5.9.1
   rrule: ^0.2.18
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
 

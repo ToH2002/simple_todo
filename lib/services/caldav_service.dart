@@ -1,8 +1,11 @@
-import 'package:caldav/caldav.dart';
+import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
+import 'package:caldav/caldav.dart';
 import '../data/todo_models.dart';
 import 'caldav/vtodo.dart';
 import 'caldav/vtodo_service.dart';
+import 'service_locator.dart';
+import 'sync_logger.dart';
 
 class CalDavConnectionResult {
   final bool success;
@@ -110,6 +113,8 @@ class CalDavService {
       return localList;
     }
 
+    final logger = getIt<SyncLogger>();
+
     try {
       final client = CalDavClient(
         baseUrl: localList.calDavUrl!,
@@ -130,9 +135,16 @@ class CalDavService {
       // 2. Prepare local state
       final updatedLocalItems = <ToDoItem>[];
 
-      // The authoritative clock timestamp for comparison
+      // Start tracking the exact time this sync cycle began in UTC
+      final currentSyncStart = DateTime.now().toUtc();
       final lastSync =
-          localList.lastSync ?? DateTime.fromMillisecondsSinceEpoch(0).toUtc();
+          (localList.lastSync ?? DateTime.fromMillisecondsSinceEpoch(0))
+              .toUtc();
+
+      await logger.logConnect(
+        localList.calDavUrl!,
+        localList.calDavUsername ?? 'anonymous',
+      );
 
       // Track which remote items we've processed
       final processedRemoteIds = <String>{};
@@ -150,9 +162,15 @@ class CalDavService {
             try {
               if (remoteMatch.href != null) {
                 await vTodoService.delete(remoteMatch);
+                await logger.logUpdate(
+                  'DELETE',
+                  localItem.id,
+                  localItem.title,
+                  lastModified: localItem.lastModified,
+                );
               }
             } catch (e) {
-              print('Sync Delete Error: $e');
+              await logger.logError('Sync Delete', e.toString());
               updatedLocalItems.add(
                 localItem,
               ); // Keep it local to retry next time
@@ -186,8 +204,14 @@ class CalDavService {
                   etag: remoteMatch.etag,
                 ),
               );
+              await logger.logUpdate(
+                'UPDATE',
+                localItem.id,
+                localItem.title,
+                lastModified: localItem.lastModified,
+              );
             } catch (e) {
-              print('Sync Update Error: $e');
+              await logger.logError('Sync Update', e.toString());
             }
             updatedLocalItems.add(localItem);
           } else if (!localChanged && !remoteChanged) {
@@ -244,8 +268,14 @@ class CalDavService {
                   calendarUri,
                   VTodo.fromToDoItem(conflictItem),
                 );
+                await logger.logUpdate(
+                  'CONFLICT DUPLICATE',
+                  conflictItem.id,
+                  conflictItem.title,
+                  lastModified: conflictItem.lastModified,
+                );
               } catch (e) {
-                print('Error pushing conflict item: $e');
+                await logger.logError('Push Conflict', e.toString());
               }
             }
           }
@@ -259,14 +289,25 @@ class CalDavService {
             final newVTodo = VTodo.fromToDoItem(localItem);
             try {
               await vTodoService.create(calendarUri, newVTodo);
+              await logger.logUpdate(
+                'CREATE',
+                localItem.id,
+                localItem.title,
+                lastModified: localItem.lastModified,
+              );
               updatedLocalItems.add(localItem); // Keep local
             } catch (e) {
-              print('Sync Create Error: $e');
+              await logger.logError('Sync Create', e.toString());
               updatedLocalItems.add(localItem);
             }
           } else {
             // Item deleted on server. Drop locally by NOT adding it to updatedLocalItems.
-            print('Item deleted remotely: ${localItem.title}');
+            await logger.logUpdate(
+              'REMOTE DROPPED',
+              localItem.id,
+              localItem.title,
+              lastModified: localItem.lastModified,
+            );
           }
         }
       }
@@ -282,9 +323,17 @@ class CalDavService {
           final newLocalItem = remoteItem.toLocalItem(
             formatListId: localList.id,
           );
+          await logger.logUpdate(
+            'PULL DOWN',
+            newLocalItem.id,
+            newLocalItem.title,
+            lastModified: newLocalItem.lastModified,
+          );
           updatedLocalItems.add(newLocalItem);
         }
       }
+
+      await logger.logInfo('Sync Complete for ${localList.name}');
 
       // Return the updated list object (Does not automatically save to JSON, the UI controller handled that)
       return ToDoList(
@@ -298,10 +347,12 @@ class CalDavService {
         calDavUsername: localList.calDavUsername,
         calDavPassword: localList.calDavPassword,
         calDavCalendarId: localList.calDavCalendarId,
-        lastSync: DateTime.now().toUtc(),
+        lastSync: currentSyncStart,
       );
     } catch (e) {
-      print('Sync failure: $e');
+      try {
+        await getIt<SyncLogger>().logError('Sync Failure', e.toString());
+      } catch (_) {}
       // On hard failure, return the unmodified local list to prevent data loss.
       return localList;
     }

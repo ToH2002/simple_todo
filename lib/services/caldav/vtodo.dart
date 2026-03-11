@@ -8,6 +8,7 @@ class VTodo {
   final String summary;
   final String? description;
   final String? status; // NEEDS-ACTION, COMPLETED, IN-PROCESS, CANCELLED
+  final int? percentComplete; // 0=none, 100=done
   final int? priority; // 0=none, 1=high, 5=normal, 9=low
   final List<String> categories;
 
@@ -28,6 +29,7 @@ class VTodo {
     required this.summary,
     this.description,
     this.status = 'NEEDS-ACTION',
+    this.percentComplete,
     this.priority = 0,
     this.categories = const [],
     this.dtstart,
@@ -90,6 +92,7 @@ class VTodo {
     DateTime dtstamp = DateTime.now().toUtc();
     DateTime? lastModified;
     String? rrule;
+    int? percentComplete;
 
     final lines = icsData.split(RegExp(r'\r?\n'));
 
@@ -168,6 +171,8 @@ class VTodo {
         due = _parseIcsDateTime(line.split(':').last);
       } else if (line.startsWith('RRULE:')) {
         rrule = line.substring(6);
+      } else if (line.startsWith('PERCENT-COMPLETE:')) {
+        percentComplete = int.tryParse(line.substring(17));
       }
     }
 
@@ -176,6 +181,7 @@ class VTodo {
       summary: summary.replaceAll('\\n', '\n').replaceAll('\\,', ','),
       description: description?.replaceAll('\\n', '\n').replaceAll('\\,', ','),
       status: status,
+      percentComplete: percentComplete,
       priority: priority,
       categories: categories,
       dtstart: dtstart,
@@ -205,7 +211,7 @@ class VTodo {
       listId: formatListId,
       title: summary,
       description: description ?? '',
-      isDone: status == 'COMPLETED',
+      isDone: status == 'COMPLETED' || percentComplete == 100,
       priority: p,
       tags: categories,
       createDateTime: dtstamp,
@@ -234,7 +240,14 @@ class VTodo {
     if (description != null)
       buffer.writeln('DESCRIPTION:${_escapeText(description!)}');
 
-    if (status != null) buffer.writeln('STATUS:$status');
+    if (status != null) {
+      buffer.writeln('STATUS:$status');
+      if (status == 'COMPLETED') {
+        buffer.writeln('PERCENT-COMPLETE:100');
+      } else {
+        buffer.writeln('PERCENT-COMPLETE:0');
+      }
+    }
     if (priority != null && priority! > 0) buffer.writeln('PRIORITY:$priority');
     if (categories.isNotEmpty)
       buffer.writeln('CATEGORIES:${categories.join(',')}');

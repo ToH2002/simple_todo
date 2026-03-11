@@ -62,6 +62,11 @@ class LocalDataManager implements DataManager {
         final content = await file.readAsString();
         final Map<String, dynamic> jsonMap = jsonDecode(content);
         if (jsonMap.containsKey('id') && jsonMap['id'] != null) {
+          if (jsonMap['id'] == 'consolidated_due_list') {
+            await file
+                .delete(); // Clean up an erroneously saved ghost list automatically
+            continue;
+          }
           final list = ToDoList.fromJson(jsonMap);
           _lists[list.id] = list;
         }
@@ -72,6 +77,7 @@ class LocalDataManager implements DataManager {
   }
 
   Future<void> _saveToDisk(ToDoList list) async {
+    if (list.id == 'consolidated_due_list') return; // Absolute guard
     try {
       final file = File('${_storageDir.path}/${list.id}.json');
       final content = jsonEncode(list.toJson());
@@ -85,9 +91,11 @@ class LocalDataManager implements DataManager {
   Future<List<ToDoList>> getLists() async {
     await init();
     final sortedLists = _lists.values.toList();
-    sortedLists.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
+    sortedLists.sort((a, b) {
+      int cmp = a.orderIndex.compareTo(b.orderIndex);
+      if (cmp != 0) return cmp;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
     return sortedLists;
   }
 
@@ -99,7 +107,17 @@ class LocalDataManager implements DataManager {
 
   @override
   Future<void> saveList(ToDoList list) async {
+    if (list.id == 'consolidated_due_list') return; // Absolute RAM Guard
     await init();
+    // If it's a completely new list, put it at the end
+    if (!_lists.containsKey(list.id) && list.orderIndex == 0) {
+      int maxOrder = _lists.isEmpty
+          ? -1
+          : _lists.values
+                .map((l) => l.orderIndex)
+                .reduce((a, b) => a > b ? a : b);
+      list.orderIndex = maxOrder + 1;
+    }
     _lists[list.id] = list;
     await _saveToDisk(list);
   }

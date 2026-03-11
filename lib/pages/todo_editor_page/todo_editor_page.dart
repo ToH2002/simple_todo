@@ -127,6 +127,29 @@ class _TodoEditorPageState extends State<TodoEditorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_manager.listName != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Icon(
+                          Icons.folder_outlined,
+                          size: 16,
+                          color: Colors.blueGrey,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _manager.listName!,
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 TextField(
                   controller: _titleController,
                   decoration: const InputDecoration(
