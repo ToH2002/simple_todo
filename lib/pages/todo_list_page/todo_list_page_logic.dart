@@ -210,9 +210,6 @@ class TodoListPageManager extends ChangeNotifier {
           }
           if (currentFilter == 'radar') {
             return item.dueDateTime != null &&
-                item.dueDateTime!.isAfter(
-                  startOfDay.subtract(const Duration(seconds: 1)),
-                ) &&
                 item.dueDateTime!.isBefore(nextWeek);
           }
           return true; // 'all' - which should show everything unless completed filter applies

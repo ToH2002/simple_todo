@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'todo_models.dart';
 
 abstract class DataManager {
@@ -8,6 +9,7 @@ abstract class DataManager {
   Future<List<ToDoList>> getLists();
   Future<ToDoList?> getList(String listId);
   Future<void> saveList(ToDoList list);
+  Future<void> saveListOrder(List<String> listIds);
   Future<void> deleteList(String listId);
 }
 
@@ -90,12 +92,26 @@ class LocalDataManager implements DataManager {
   @override
   Future<List<ToDoList>> getLists() async {
     await init();
+    final prefs = await SharedPreferences.getInstance();
+    final order = prefs.getStringList('list_order');
+
     final sortedLists = _lists.values.toList();
-    sortedLists.sort((a, b) {
-      int cmp = a.orderIndex.compareTo(b.orderIndex);
-      if (cmp != 0) return cmp;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    if (order != null && order.isNotEmpty) {
+      final orderMap = {for (int i = 0; i < order.length; i++) order[i]: i};
+      sortedLists.sort((a, b) {
+        final posA = orderMap[a.id] ?? 999;
+        final posB = orderMap[b.id] ?? 999;
+        int cmp = posA.compareTo(posB);
+        if (cmp != 0) return cmp;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    } else {
+      sortedLists.sort((a, b) {
+        int cmp = a.orderIndex.compareTo(b.orderIndex);
+        if (cmp != 0) return cmp;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    }
     return sortedLists;
   }
 
@@ -120,6 +136,12 @@ class LocalDataManager implements DataManager {
     }
     _lists[list.id] = list;
     await _saveToDisk(list);
+  }
+
+  @override
+  Future<void> saveListOrder(List<String> listIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('list_order', listIds);
   }
 
   @override

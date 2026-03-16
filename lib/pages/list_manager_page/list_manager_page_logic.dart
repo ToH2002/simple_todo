@@ -42,11 +42,13 @@ class ListManagerPageLogic extends ChangeNotifier {
     final ToDoList item = lists.removeAt(oldIndex);
     lists.insert(newIndex, item);
 
-    // Persist new order indices
+    // Persist new order indices (legacy)
     for (int i = 0; i < lists.length; i++) {
       lists[i].orderIndex = i;
       await _dataManager.saveList(lists[i]);
     }
+    // New persistent order
+    await _dataManager.saveListOrder(lists.map((l) => l.id).toList());
     notifyListeners();
   }
 }

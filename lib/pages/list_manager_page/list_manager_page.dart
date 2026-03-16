@@ -69,6 +69,7 @@ class _ListManagerPageState extends State<ListManagerPage> {
             ),
           ),
           body: ReorderableListView.builder(
+            buildDefaultDragHandles: false,
             itemCount: _manager.lists.length,
             onReorder: _manager.reorderLists,
             itemBuilder: (context, index) {

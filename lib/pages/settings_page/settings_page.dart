@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/service_locator.dart';
 import '../../data/settings_manager.dart';
 import '../sync_log_page/sync_log_page.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -12,6 +13,22 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final SettingsManager _settings = getIt<SettingsManager>();
+  String _version = '...';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _version = info.version;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -119,6 +136,16 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   );
                 },
+              ),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24.0),
+                child: Center(
+                  child: Text(
+                    'Version $_version',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
               ),
             ],
           ),

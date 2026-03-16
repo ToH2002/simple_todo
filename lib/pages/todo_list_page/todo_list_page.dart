@@ -329,7 +329,7 @@ class _TodoListPageState extends State<TodoListPage> {
 
   Widget _buildQuickListSelector() {
     return Container(
-      height: 36,
+      height: 54,
       width: double.infinity,
       color: Theme.of(context).scaffoldBackgroundColor,
       child: Row(
@@ -379,7 +379,7 @@ class _TodoListPageState extends State<TodoListPage> {
         }
       },
       child: Container(
-        height: 36,
+        height: 54,
         padding: const EdgeInsets.symmetric(horizontal: 4.0),
         alignment: Alignment.center,
         color: color,
@@ -398,6 +398,9 @@ class _TodoListPageState extends State<TodoListPage> {
   }
 
   Widget _buildFilterChips() {
+    if (_manager.currentList?.id == 'consolidated_due_list') {
+      return const SizedBox.shrink();
+    }
     final tags = List<String>.from(_manager.currentList?.tags ?? [])
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
@@ -681,7 +684,7 @@ class _TodoListPageState extends State<TodoListPage> {
               tile = Container(
                 decoration: BoxDecoration(
                   border: Border(
-                    left: BorderSide(color: sourceList.color, width: 4.0),
+                    left: BorderSide(color: sourceList.color, width: 12.0),
                   ),
                 ),
                 child: tile,
